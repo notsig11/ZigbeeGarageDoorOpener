@@ -36,7 +36,7 @@ private:
 
     // Populated exclusively by init(); no defaults. All access is guarded by initialized_.
     static inline Config config_{};
-    static inline bool initialized_{false};
+    static inline std::atomic<bool> initialized_{false};
     // Number of relay pulse tasks currently running.
     static inline std::atomic<int> active_pulses_{0};
 
@@ -143,17 +143,16 @@ public:
             .duration_ticks = (duration_ticks > 0) ? duration_ticks : 1
         };
 
-        active_pulses_++;
-
         if (!params) {
             ESP_LOGE(TAG, "Out of memory allocating pulse worker params");
             // Fallback: synchronous pulse with short delay
             gpio_set_level(target_pin, config_.active_level);
             vTaskDelay(pdMS_TO_TICKS(50));
             gpio_set_level(target_pin, inactive);
-            active_pulses_--;
             return false;
         }
+
+        ++active_pulses_;
 
         BaseType_t res = xTaskCreate(
             pulse_worker,
@@ -167,7 +166,7 @@ public:
         if (res != pdPASS) {
             ESP_LOGE(TAG, "Failed to spawn pulse worker task for channel %u", channel);
             delete params;
-            active_pulses_--;
+            --active_pulses_;
             return false;
         }
 
@@ -191,14 +190,14 @@ private:
             .intr_type    = GPIO_INTR_DISABLE,
         };
 
-        auto ret = gpio_config(&io_conf);
-
         const uint32_t inactive = (config_.active_level == 1) ? 0 : 1;
         for (const auto pin : config_.pins) {
             if (pin != GPIO_NUM_NC) {
                 gpio_set_level(pin, inactive);
             }
         }
+
+        auto ret = gpio_config(&io_conf);
 
         ESP_LOGI(TAG, "Initialized %zu relay channel(s)", RelayCount);
         for (std::size_t i = 0; i < RelayCount; ++i) {
