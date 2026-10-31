@@ -4,6 +4,7 @@
 // before each case and inspect the recorded events afterwards.
 
 #include <cstdint>
+#include <functional>
 #include <string>
 #include <vector>
 
@@ -25,8 +26,15 @@ struct GpioConfigRecord {
     int intr_type{-1};
 };
 
+struct PendingTask {
+    void (*fn)(void*);
+    void* params;
+};
+
 struct State {
     std::vector<Event> events;
+    // Tasks created but not run inline; run_pending_tasks() executes them so they self-clean.
+    std::vector<PendingTask> pending_tasks;
 
     // Behaviour switches.
     int gpio_config_result{0};       // value returned by gpio_config()
@@ -41,7 +49,17 @@ struct State {
     unsigned last_task_priority{0};
     int task_delete_calls{0};
 
-    void reset() { *this = State{}; }
+    void run_pending_tasks() {
+        for (auto& t : pending_tasks) {
+            t.fn(t.params);
+        }
+        pending_tasks.clear();
+    }
+
+    void reset() {
+        run_pending_tasks();
+        *this = State{};
+    }
 };
 
 inline State& state() {

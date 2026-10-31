@@ -3847,6 +3847,30 @@ CONFIG_WL_SECTOR_SIZE=4096
 # end of Wear Levelling
 
 #
+# Garage Door Opener
+#
+
+#
+# Relay Configuration
+#
+# default:
+CONFIG_GARAGE_RELAY_COUNT=4
+# default:
+CONFIG_GARAGE_RELAY_PIN_1=18
+# default:
+CONFIG_GARAGE_RELAY_PIN_2=20
+# default:
+CONFIG_GARAGE_RELAY_PIN_3=19
+# default:
+CONFIG_GARAGE_RELAY_PIN_4=21
+# default:
+CONFIG_GARAGE_RELAY_PULSE_DURATION_MS=300
+# default:
+CONFIG_GARAGE_RELAY_ACTIVE_LEVEL=0
+# end of Relay Configuration
+# end of Garage Door Opener
+
+#
 # Zigbee
 #
 CONFIG_ZB_ENABLED=y

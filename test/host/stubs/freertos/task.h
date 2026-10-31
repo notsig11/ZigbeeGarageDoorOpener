@@ -25,6 +25,8 @@ inline BaseType_t xTaskCreate(TaskFunction_t fn, const char* name, uint32_t stac
     }
     if (s.run_tasks_inline) {
         fn(params);
+    } else {
+        s.pending_tasks.push_back({fn, params});
     }
     return pdPASS;
 }

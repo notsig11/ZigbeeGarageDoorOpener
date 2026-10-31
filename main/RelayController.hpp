@@ -183,7 +183,6 @@ private:
             }
         }
 
-        // TESTME: Swapped pulldown for pullup
         const gpio_config_t io_conf{
             .pin_bit_mask = pin_mask,
             .mode         = GPIO_MODE_OUTPUT,

@@ -3,6 +3,7 @@
 #include "freertos/task.h"
 #include "nvs_flash.h"
 #include "esp_log.h"
+#include "sdkconfig.h"
 
 #include "RelayController.hpp"
 #include "ZigbeeGarageDoorOpener.hpp"
@@ -10,7 +11,46 @@
 namespace {
 constexpr const char* TAG = "Main";
 
-using GarageRelays = RelayController<4>;
+// Map a 0-based relay index to its corresponding Kconfig GPIO pin value.
+constexpr gpio_num_t relay_pin_for(int index) {
+    switch (index) {
+        case 0: return static_cast<gpio_num_t>(CONFIG_GARAGE_RELAY_PIN_1);
+#if CONFIG_GARAGE_RELAY_COUNT >= 2
+        case 1: return static_cast<gpio_num_t>(CONFIG_GARAGE_RELAY_PIN_2);
+#endif
+#if CONFIG_GARAGE_RELAY_COUNT >= 3
+        case 2: return static_cast<gpio_num_t>(CONFIG_GARAGE_RELAY_PIN_3);
+#endif
+#if CONFIG_GARAGE_RELAY_COUNT >= 4
+        case 3: return static_cast<gpio_num_t>(CONFIG_GARAGE_RELAY_PIN_4);
+#endif
+#if CONFIG_GARAGE_RELAY_COUNT >= 5
+        case 4: return static_cast<gpio_num_t>(CONFIG_GARAGE_RELAY_PIN_5);
+#endif
+#if CONFIG_GARAGE_RELAY_COUNT >= 6
+        case 5: return static_cast<gpio_num_t>(CONFIG_GARAGE_RELAY_PIN_6);
+#endif
+#if CONFIG_GARAGE_RELAY_COUNT >= 7
+        case 6: return static_cast<gpio_num_t>(CONFIG_GARAGE_RELAY_PIN_7);
+#endif
+#if CONFIG_GARAGE_RELAY_COUNT >= 8
+        case 7: return static_cast<gpio_num_t>(CONFIG_GARAGE_RELAY_PIN_8);
+#endif
+        default: return GPIO_NUM_NC;
+    }
+}
+
+// Build the relay pin array from Kconfig values based on relay count.
+template <int N>
+constexpr std::array<gpio_num_t, N> get_relay_pins() {
+    std::array<gpio_num_t, N> pins{};
+    for (int i = 0; i < N; ++i) {
+        pins[i] = relay_pin_for(i);
+    }
+    return pins;
+}
+
+using GarageRelays = RelayController<CONFIG_GARAGE_RELAY_COUNT>;
 using ZigbeeService = ZigbeeGarageDoorOpener<GarageRelays>;
 
 // Enables the external antenna switch: GPIO 3 low, GPIO 14 high.
@@ -82,9 +122,9 @@ extern "C" void app_main() noexcept {
     ESP_ERROR_CHECK(ret);
 
     GarageRelays::Config relay_config{
-        .pins = {GPIO_NUM_18, GPIO_NUM_20, GPIO_NUM_19, GPIO_NUM_21},
-        .pulse_duration = std::chrono::milliseconds{300}, // 300ms momentary pulse
-        .active_level = 0                                  // Active-low relay bank.  This is counter to the datasheet...
+        .pins = get_relay_pins<CONFIG_GARAGE_RELAY_COUNT>(),
+        .pulse_duration = std::chrono::milliseconds{CONFIG_GARAGE_RELAY_PULSE_DURATION_MS},
+        .active_level = CONFIG_GARAGE_RELAY_ACTIVE_LEVEL
     };
     ESP_ERROR_CHECK(GarageRelays::init(relay_config));
 

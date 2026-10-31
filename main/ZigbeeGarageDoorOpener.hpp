@@ -371,7 +371,7 @@ public:
                  RelayCtrl::relay_count(), config_.base_endpoint);
 
         for (std::size_t i = 0; i < RelayCtrl::relay_count(); ++i) {
-            const uint8_t ep_id = static_cast<uint8_t>(config_.base_endpoint + i);
+            const auto ep_id = static_cast<uint8_t>(config_.base_endpoint + i);
             ezb_zha_door_lock_config_t ep_cfg{};
             ep_cfg.basic_cfg.zcl_version = EZB_ZCL_BASIC_ZCL_VERSION_DEFAULT_VALUE;
             ep_cfg.basic_cfg.power_source = EZB_ZCL_BASIC_POWER_SOURCE_DC_SOURCE;

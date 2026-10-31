@@ -1,0 +1,85 @@
+menu "Garage Door Opener"
+
+    menu "Relay Configuration"
+
+        config GARAGE_RELAY_COUNT
+            int "Number of relay channels"
+            range 1 8
+            default 4
+            help
+                Number of relay channels (garage door buttons) supported.
+                Each relay is exposed as a Zigbee Door Lock endpoint.
+
+        config GARAGE_RELAY_PIN_1
+            int "GPIO pin for relay channel 1"
+            default 18
+            help
+                GPIO pin connected to the first relay channel.
+
+        config GARAGE_RELAY_PIN_2
+            int "GPIO pin for relay channel 2"
+            default 20
+            depends on GARAGE_RELAY_COUNT >= 2
+            help
+                GPIO pin connected to the second relay channel.
+
+        config GARAGE_RELAY_PIN_3
+            int "GPIO pin for relay channel 3"
+            default 19
+            depends on GARAGE_RELAY_COUNT >= 3
+            help
+                GPIO pin connected to the third relay channel.
+
+        config GARAGE_RELAY_PIN_4
+            int "GPIO pin for relay channel 4"
+            default 21
+            depends on GARAGE_RELAY_COUNT >= 4
+            help
+                GPIO pin connected to the fourth relay channel.
+
+        config GARAGE_RELAY_PIN_5
+            int "GPIO pin for relay channel 5"
+            default 22
+            depends on GARAGE_RELAY_COUNT >= 5
+            help
+                GPIO pin connected to the fifth relay channel.
+
+        config GARAGE_RELAY_PIN_6
+            int "GPIO pin for relay channel 6"
+            default 23
+            depends on GARAGE_RELAY_COUNT >= 6
+            help
+                GPIO pin connected to the sixth relay channel.
+
+        config GARAGE_RELAY_PIN_7
+            int "GPIO pin for relay channel 7"
+            default 25
+            depends on GARAGE_RELAY_COUNT >= 7
+            help
+                GPIO pin connected to the seventh relay channel.
+
+        config GARAGE_RELAY_PIN_8
+            int "GPIO pin for relay channel 8"
+            default 26
+            depends on GARAGE_RELAY_COUNT >= 8
+            help
+                GPIO pin connected to the eighth relay channel.
+
+        config GARAGE_RELAY_PULSE_DURATION_MS
+            int "Relay pulse duration (milliseconds)"
+            range 50 2000
+            default 300
+            help
+                Duration of the momentary pulse sent to each relay.
+
+        config GARAGE_RELAY_ACTIVE_LEVEL
+            int "Relay active logic level"
+            default 0
+            range 0 1
+            help
+                Logic level that activates the relay.
+                0 = active-low, 1 = active-high.
+
+    endmenu
+
+endmenu
