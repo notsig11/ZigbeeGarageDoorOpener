@@ -134,7 +134,8 @@ extern "C" void app_main() noexcept {
 
     ZigbeeService::Config zb_config{
         .base_endpoint = 1,
-        .primary_channel_mask = (1U << 20), // Channel 20 (0x00100000)
+        .primary_channel_mask = CONFIG_GARAGE_ZB_PRIMARY_CHANNEL_MASK,
+        .secondary_channel_mask = CONFIG_GARAGE_ZB_SECONDARY_CHANNEL_MASK,
         .steering_retry_interval = std::chrono::milliseconds{3000}
     };
 

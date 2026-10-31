@@ -79,6 +79,25 @@ menu "Garage Door Opener"
             help
                 Logic level that activates the relay.
                 0 = active-low, 1 = active-high.
+    endmenu
+
+    menu "Zigbee Channel Configuration"
+
+        config GARAGE_ZB_PRIMARY_CHANNEL_MASK
+            hex "Primary channel mask"
+            default 0x07FFF800
+            help
+                Bitmask of Zigbee channels (11-26) to scan when joining the network.
+                0x07FFF800 enables all channels 11-26.
+                For a single channel, use (1 << channel), e.g. (1 << 20) for channel 20.
+
+        config GARAGE_ZB_SECONDARY_CHANNEL_MASK
+            hex "Secondary channel mask"
+            default 0x07FFF800
+            help
+                Bitmask of Zigbee channels (11-26) to scan when the primary set yields no network.
+                0x07FFF800 enables all channels 11-26.
+                0 means "same as primary channel mask" (never scan beyond the primary set).
 
     endmenu
 
