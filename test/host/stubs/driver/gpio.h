@@ -53,6 +53,12 @@ inline esp_err_t gpio_set_level(gpio_num_t pin, uint32_t level) {
     return ESP_OK;
 }
 
+inline uint32_t gpio_get_level(gpio_num_t pin) {
+    // Return the simulated level stored in host_fake state for this pin.
+    // Default to 1 (pull-up high) if not explicitly set.
+    return host_fake::state().gpio_levels[pin];
+}
+
 inline esp_err_t gpio_config(const gpio_config_t* cfg) {
     auto& s = host_fake::state();
     s.events.push_back({host_fake::EventKind::GpioConfig, 0, 0});

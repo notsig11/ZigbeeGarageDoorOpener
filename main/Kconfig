@@ -81,6 +81,93 @@ menu "Garage Door Opener"
                 0 = active-low, 1 = active-high.
     endmenu
 
+    menu "Door Sensor Configuration"
+
+        config GARAGE_DOOR_SENSOR_COUNT
+            int "Number of door sensor channels"
+            range 0 8
+            default 1
+            help
+                Number of door sensor channels (magnetic reed switches).
+                Each sensor reports the open/closed state via the Zigbee Door Lock cluster.
+                Set to 0 to disable door sensors.
+
+        config GARAGE_DOOR_SENSOR_PIN_1
+            int "GPIO pin for door sensor channel 1"
+            default 0
+            depends on GARAGE_DOOR_SENSOR_COUNT >= 1
+            help
+                GPIO pin connected to the first door sensor (magnetic reed switch).
+
+        config GARAGE_DOOR_SENSOR_PIN_2
+            int "GPIO pin for door sensor channel 2"
+            default 1
+            depends on GARAGE_DOOR_SENSOR_COUNT >= 2
+            help
+                GPIO pin connected to the second door sensor.
+
+        config GARAGE_DOOR_SENSOR_PIN_3
+            int "GPIO pin for door sensor channel 3"
+            default 2
+            depends on GARAGE_DOOR_SENSOR_COUNT >= 3
+            help
+                GPIO pin connected to the third door sensor.
+
+        config GARAGE_DOOR_SENSOR_PIN_4
+            int "GPIO pin for door sensor channel 4"
+            default 3
+            depends on GARAGE_DOOR_SENSOR_COUNT >= 4
+            help
+                GPIO pin connected to the fourth door sensor.
+
+        config GARAGE_DOOR_SENSOR_PIN_5
+            int "GPIO pin for door sensor channel 5"
+            default 4
+            depends on GARAGE_DOOR_SENSOR_COUNT >= 5
+            help
+                GPIO pin connected to the fifth door sensor.
+
+        config GARAGE_DOOR_SENSOR_PIN_6
+            int "GPIO pin for door sensor channel 6"
+            default 5
+            depends on GARAGE_DOOR_SENSOR_COUNT >= 6
+            help
+                GPIO pin connected to the sixth door sensor.
+
+        config GARAGE_DOOR_SENSOR_PIN_7
+            int "GPIO pin for door sensor channel 7"
+            default 6
+            depends on GARAGE_DOOR_SENSOR_COUNT >= 7
+            help
+                GPIO pin connected to the seventh door sensor.
+
+        config GARAGE_DOOR_SENSOR_PIN_8
+            int "GPIO pin for door sensor channel 8"
+            default 7
+            depends on GARAGE_DOOR_SENSOR_COUNT >= 8
+            help
+                GPIO pin connected to the eighth door sensor.
+
+        config GARAGE_DOOR_SENSOR_ACTIVE_LEVEL
+            int "Door sensor active logic level"
+            default 0
+            range 0 1
+            help
+                Logic level that indicates the door is closed (reed switch closed).
+                0 = active-low (reed switch pulls pin to GND when closed),
+                1 = active-high (reed switch pulls pin to VCC when closed).
+
+        config GARAGE_DOOR_SENSOR_POLL_INTERVAL_MS
+            int "Door sensor poll interval (milliseconds)"
+            range 1000 60000
+            default 5000
+            help
+                How often (in milliseconds) to poll door sensors for state changes.
+                This ensures the Zigbee LockState attribute reflects doors opened
+                by wall buttons or remotes, not just Zigbee commands.
+
+    endmenu
+
     menu "Zigbee Channel Configuration"
 
         config GARAGE_ZB_PRIMARY_CHANNEL_MASK

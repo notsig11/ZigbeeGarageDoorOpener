@@ -16,6 +16,7 @@
 #include "ezbee/app_signals.h"
 
 #include "RelayController.hpp"
+#include "DoorSensor.hpp"
 #include "ZigbeeHelpers.hpp"
 
 #include <algorithm>
@@ -40,12 +41,23 @@ concept RelayControllerType = requires(uint8_t channel, const typename T::Config
 };
 
 /**
+ * @brief Concept verifying a valid DoorSensor implementation.
+ */
+template <typename T>
+concept DoorSensorType = requires(uint8_t channel, const typename T::Config& cfg) {
+    { T::sensor_count() } -> std::same_as<std::size_t>;
+    { T::is_door_closed(channel) } -> std::same_as<bool>;
+    { T::init(cfg) } -> std::same_as<esp_err_t>;
+};
+
+/**
  * @brief Zigbee Garage Door Opener service managing Zigbee coordinator pairing and relay endpoints.
  *
  * @tparam RelayCtrl RelayController class managing the physical GPIO relays.
+ * @tparam Sensor DoorSensor class managing the physical GPIO door sensors.
  */
-template <typename RelayCtrl = RelayController<2>>
-requires RelayControllerType<RelayCtrl>
+template <typename RelayCtrl = RelayController<2>, typename Sensor = DoorSensor<0>>
+requires RelayControllerType<RelayCtrl> && DoorSensorType<Sensor>
 class ZigbeeGarageDoorOpener {
 public:
     static constexpr uint8_t DEFAULT_BASE_ENDPOINT = 1;
@@ -79,6 +91,10 @@ private:
     static inline TimerHandle_t retry_timer_{nullptr};
     // BDB commissioning mode the retry timer re-runs when it fires.
     static inline std::atomic<ezb_bdb_comm_mode_mask_t> retry_mode_{EZB_BDB_MODE_NETWORK_STEERING};
+    // Periodic sensor poll timer for detecting doors opened by button/remote
+    static inline TimerHandle_t sensor_poll_timer_{nullptr};
+    // Previous sensor state per channel (1-based index, size = max sensors). -1 = not yet read.
+    static inline std::array<int8_t, 8> prev_sensor_state_{};
 //    static inline std::atomic<bool> joined_{false};
 
 
@@ -117,6 +133,67 @@ private:
     static void cancel_retry() noexcept {
         if (retry_timer_) {
             xTimerStop(retry_timer_, 0);
+        }
+    }
+
+    // FreeRTOS Timer callback for periodic sensor polling
+    static void on_sensor_poll_timer(TimerHandle_t) noexcept {
+        if constexpr (Sensor::sensor_count() > 0) {
+            for (uint8_t ch = 1; ch <= Sensor::sensor_count(); ++ch) {
+                const bool closed = Sensor::is_door_closed(ch);
+                const int8_t current_state = closed ? 1 : 0;
+                const int8_t previous = prev_sensor_state_[ch - 1];
+
+                // Skip if state hasn't changed (or first read)
+                if (previous == current_state) {
+                    continue;
+                }
+                prev_sensor_state_[ch - 1] = current_state;
+
+                uint8_t lock_state = closed ? EZB_ZCL_DOOR_LOCK_LOCK_STATE_LOCKED
+                                                  : EZB_ZCL_DOOR_LOCK_LOCK_STATE_UNLOCKED;
+                const uint8_t ep = static_cast<uint8_t>(config_.base_endpoint + ch - 1);
+
+                ESP_LOGI(TAG, "Sensor poll: channel %u door %s -> updating endpoint %u LockState to %u (%s)",
+                         ch, closed ? "closed" : "open", ep, lock_state,
+                         closed ? "Locked" : "Unlocked");
+
+                // Update the LockState attribute; skip Zigbee lock to avoid blocking the timer task
+                ezb_zcl_set_attr_value(ep,
+                                       EZB_ZCL_CLUSTER_ID_DOOR_LOCK,
+                                       EZB_ZCL_CLUSTER_SERVER,
+                                       EZB_ZCL_ATTR_DOOR_LOCK_LOCK_STATE_ID,
+                                       EZB_ZCL_STD_MANUF_CODE,
+                                       &lock_state,
+                                       false);
+            }
+        }
+    }
+
+    // Starts the periodic sensor poll timer with the configured interval
+    static void start_sensor_poll_timer(uint32_t interval_ms) noexcept {
+        if constexpr (Sensor::sensor_count() > 0) {
+            // Initialize previous states to -1 so first poll always reports
+            for (std::size_t i = 0; i < Sensor::sensor_count(); ++i) {
+                prev_sensor_state_[i] = -1;
+            }
+
+            sensor_poll_timer_ = xTimerCreate(
+                "zb_sensor_poll",
+                pdMS_TO_TICKS(interval_ms),
+                pdTRUE,               // auto-reload
+                nullptr,
+                on_sensor_poll_timer
+            );
+            if (!sensor_poll_timer_) {
+                ESP_LOGE(TAG, "Failed to create sensor poll timer");
+                return;
+            }
+            if (xTimerStart(sensor_poll_timer_, 0) != pdPASS) {
+                ESP_LOGE(TAG, "Failed to start sensor poll timer");
+            } else {
+                ESP_LOGI(TAG, "Sensor poll timer started (interval: %u ms)", interval_ms);
+            }
         }
     }
 
@@ -213,6 +290,35 @@ private:
         return true;
     }
 
+    // Determines the current lock state for a channel: if a sensor is mapped, reads it; otherwise uses the command state.
+    [[nodiscard]] static uint8_t resolve_lock_state(uint8_t channel, uint8_t command_lock_state) noexcept {
+        if constexpr (Sensor::sensor_count() > 0) {
+            // Map relay channel to sensor channel (1-based). If the sensor channel exists, read it.
+            const uint8_t sensorCh = channel; // sensor channel 1 maps to relay channel 1, etc.
+            if (sensorCh <= Sensor::sensor_count()) {
+                const bool closed = Sensor::is_door_closed(sensorCh);
+                uint8_t lock_state = closed ? EZB_ZCL_DOOR_LOCK_LOCK_STATE_LOCKED : EZB_ZCL_DOOR_LOCK_LOCK_STATE_UNLOCKED;
+                ESP_LOGI(TAG, "Channel %u: sensor %u reports door %s -> LockState %u (%s)",
+                         channel, sensorCh, closed ? "closed" : "open",
+                         lock_state,
+                         closed ? "Locked" : "Unlocked");
+                return lock_state;
+            } else {
+                ESP_LOGW(TAG, "Channel %u: no sensor mapped (sensor count %zu), falling back to command state %u",
+                         channel, Sensor::sensor_count(), command_lock_state);
+            }
+        } else {
+            ESP_LOGD(TAG, "Channel %u: sensors disabled at compile time, using command state %u", channel, command_lock_state);
+        }
+        // No sensor mapped or sensor count is 0 — fall back to the command state.
+        ESP_LOGI(TAG, "Channel %u: using command LockState: %u (%s)",
+                 channel, command_lock_state,
+                 command_lock_state == EZB_ZCL_DOOR_LOCK_LOCK_STATE_LOCKED ? "Locked"
+                 : command_lock_state == EZB_ZCL_DOOR_LOCK_LOCK_STATE_UNLOCKED ? "Unlocked"
+                 : "Other");
+        return command_lock_state;
+    }
+
     // Handles a Lock/Unlock command: pulses the mapped relay and, on success, updates the LockState attribute.
     [[nodiscard]] static ezb_zcl_status_t handle_door_command(uint8_t ep, uint8_t new_lock_state, const char* label) noexcept {
         const auto channel = endpoint_to_channel(ep);
@@ -227,13 +333,24 @@ private:
             return EZB_ZCL_STATUS_FAIL;
         }
 
+        // Resolve the actual lock state from the sensor (if available) or use the command state.
+        uint8_t actual_lock_state = resolve_lock_state(*channel, new_lock_state);
+
+        ESP_LOGI(TAG, "Setting LockState attribute on endpoint %u to: %u (%s)",
+                 ep, actual_lock_state,
+                 actual_lock_state == EZB_ZCL_DOOR_LOCK_LOCK_STATE_LOCKED ? "Locked"
+                 : actual_lock_state == EZB_ZCL_DOOR_LOCK_LOCK_STATE_UNLOCKED ? "Unlocked"
+                 : actual_lock_state == EZB_ZCL_DOOR_LOCK_LOCK_STATE_NOT_FULLY_LOCKED ? "Not Fully Locked"
+                 : "Unknown");
+
         ezb_zcl_set_attr_value(ep,
                                EZB_ZCL_CLUSTER_ID_DOOR_LOCK,
                                EZB_ZCL_CLUSTER_SERVER,
                                EZB_ZCL_ATTR_DOOR_LOCK_LOCK_STATE_ID,
                                EZB_ZCL_STD_MANUF_CODE,
-                               &new_lock_state,
+                               &actual_lock_state,
                                false);
+        ESP_LOGI(TAG, "LockState attribute set on endpoint %u to: %u", ep, actual_lock_state);
         return EZB_ZCL_STATUS_SUCCESS;
     }
 
@@ -376,9 +493,22 @@ public:
             ep_cfg.basic_cfg.zcl_version = EZB_ZCL_BASIC_ZCL_VERSION_DEFAULT_VALUE;
             ep_cfg.basic_cfg.power_source = EZB_ZCL_BASIC_POWER_SOURCE_DC_SOURCE;
             ep_cfg.identify_cfg.identify_time = EZB_ZCL_IDENTIFY_IDENTIFY_TIME_DEFAULT_VALUE;
-            ep_cfg.door_lock_cfg.lock_state = EZB_ZCL_DOOR_LOCK_LOCK_STATE_NOT_FULLY_LOCKED;
+            // Initial lock state: use sensor reading if available, otherwise default to Not Fully Locked.
+            uint8_t initial_lock_state = EZB_ZCL_DOOR_LOCK_LOCK_STATE_NOT_FULLY_LOCKED;
+            if constexpr (Sensor::sensor_count() > 0) {
+                const uint8_t sensorCh = static_cast<uint8_t>(i + 1);
+                if (sensorCh <= Sensor::sensor_count()) {
+                    // Sensor will be initialized before start() is called; read raw GPIO level for debug.
+                    initial_lock_state = EZB_ZCL_DOOR_LOCK_LOCK_STATE_NOT_FULLY_LOCKED;
+                    ESP_LOGI(TAG, "  - Endpoint %u will use sensor %u for lock state (initial: Not Fully Locked)",
+                             ep_id, sensorCh);
+                }
+            }
+            ep_cfg.door_lock_cfg.lock_state = initial_lock_state;
             ep_cfg.door_lock_cfg.lock_type = EZB_ZCL_DOOR_LOCK_LOCK_TYPE_DEAD_BOLT;
             ep_cfg.door_lock_cfg.actuator_enabled = true;
+            ESP_LOGI(TAG, "  - Endpoint %u lock state attribute initialized to: %u",
+                     ep_id, initial_lock_state);
             ep_cfg.groups_cfg.name_support = EZB_ZCL_GROUPS_NAME_SUPPORT_DEFAULT_VALUE;
             ep_cfg.scenes_cfg.scene_count = EZB_ZCL_SCENES_SCENE_COUNT_DEFAULT_VALUE;
             ep_cfg.scenes_cfg.current_scene = EZB_ZCL_SCENES_CURRENT_SCENE_DEFAULT_VALUE;
@@ -439,6 +569,11 @@ public:
         if (task_res != pdPASS) {
             ESP_LOGE(TAG, "Failed to create Zigbee main loop task");
             return ESP_FAIL;
+        }
+
+        // Start periodic sensor polling to detect doors opened by button/remote
+        if constexpr (Sensor::sensor_count() > 0) {
+            start_sensor_poll_timer(CONFIG_GARAGE_DOOR_SENSOR_POLL_INTERVAL_MS);
         }
 
         ESP_LOGI(TAG, "Zigbee Garage Door Opener service started successfully");

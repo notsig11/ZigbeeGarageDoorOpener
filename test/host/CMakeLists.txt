@@ -17,6 +17,7 @@ add_executable(host_tests
     test_main.cpp
     test_zigbee_helpers.cpp
     test_relay_controller.cpp
+    test_door_sensor.cpp
 )
 
 target_include_directories(host_tests PRIVATE

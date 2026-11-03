@@ -3,6 +3,7 @@
 // Shared recording state for the host-side ESP-IDF stubs. Tests call host_fake::state().reset()
 // before each case and inspect the recorded events afterwards.
 
+#include <array>
 #include <cstdint>
 #include <functional>
 #include <string>
@@ -10,7 +11,9 @@
 
 namespace host_fake {
 
-enum class EventKind { GpioSetLevel, GpioConfig, TaskCreate, TaskDelay };
+constexpr int MAX_GPIO_PIN = 24;
+
+enum class EventKind { GpioSetLevel, GpioConfig, TaskCreate, TaskDelay, TimerCreate, TimerStart, TimerStop, TimerChangePeriod };
 
 struct Event {
     EventKind kind;
@@ -36,9 +39,13 @@ struct State {
     // Tasks created but not run inline; run_pending_tasks() executes them so they self-clean.
     std::vector<PendingTask> pending_tasks;
 
+    // Simulated GPIO input levels, indexed by pin number. Default 1 (pull-up high).
+    std::array<uint32_t, MAX_GPIO_PIN> gpio_levels{};
+
     // Behaviour switches.
     int gpio_config_result{0};       // value returned by gpio_config()
     bool task_create_fails{false};   // xTaskCreate returns errCOULD_NOT_ALLOCATE_REQUIRED_MEMORY
+    bool timer_create_fails{false};  // xTimerCreate returns nullptr
     bool run_tasks_inline{true};     // run the task function synchronously inside xTaskCreate
 
     // Recorded details.
@@ -59,6 +66,8 @@ struct State {
     void reset() {
         run_pending_tasks();
         *this = State{};
+        // Default all GPIO levels to 1 (pull-up high)
+        gpio_levels.fill(1);
     }
 };
 

@@ -6,6 +6,7 @@
 #include "sdkconfig.h"
 
 #include "RelayController.hpp"
+#include "DoorSensor.hpp"
 #include "ZigbeeGarageDoorOpener.hpp"
 
 namespace {
@@ -50,8 +51,55 @@ constexpr std::array<gpio_num_t, N> get_relay_pins() {
     return pins;
 }
 
+// Map a 0-based sensor index to its corresponding Kconfig GPIO pin value.
+constexpr gpio_num_t sensor_pin_for(int index) {
+    switch (index) {
+#if CONFIG_GARAGE_DOOR_SENSOR_COUNT >= 1
+        case 0: return static_cast<gpio_num_t>(CONFIG_GARAGE_DOOR_SENSOR_PIN_1);
+#endif
+#if CONFIG_GARAGE_DOOR_SENSOR_COUNT >= 2
+        case 1: return static_cast<gpio_num_t>(CONFIG_GARAGE_DOOR_SENSOR_PIN_2);
+#endif
+#if CONFIG_GARAGE_DOOR_SENSOR_COUNT >= 3
+        case 2: return static_cast<gpio_num_t>(CONFIG_GARAGE_DOOR_SENSOR_PIN_3);
+#endif
+#if CONFIG_GARAGE_DOOR_SENSOR_COUNT >= 4
+        case 3: return static_cast<gpio_num_t>(CONFIG_GARAGE_DOOR_SENSOR_PIN_4);
+#endif
+#if CONFIG_GARAGE_DOOR_SENSOR_COUNT >= 5
+        case 4: return static_cast<gpio_num_t>(CONFIG_GARAGE_DOOR_SENSOR_PIN_5);
+#endif
+#if CONFIG_GARAGE_DOOR_SENSOR_COUNT >= 6
+        case 5: return static_cast<gpio_num_t>(CONFIG_GARAGE_DOOR_SENSOR_PIN_6);
+#endif
+#if CONFIG_GARAGE_DOOR_SENSOR_COUNT >= 7
+        case 6: return static_cast<gpio_num_t>(CONFIG_GARAGE_DOOR_SENSOR_PIN_7);
+#endif
+#if CONFIG_GARAGE_DOOR_SENSOR_COUNT >= 8
+        case 7: return static_cast<gpio_num_t>(CONFIG_GARAGE_DOOR_SENSOR_PIN_8);
+#endif
+        default: return GPIO_NUM_NC;
+    }
+}
+
+// Build the sensor pin array from Kconfig values based on sensor count.
+template <int N>
+constexpr std::array<gpio_num_t, N> get_sensor_pins() {
+    std::array<gpio_num_t, N> pins{};
+    for (int i = 0; i < N; ++i) {
+        pins[i] = sensor_pin_for(i);
+    }
+    return pins;
+}
+
 using GarageRelays = RelayController<CONFIG_GARAGE_RELAY_COUNT>;
+
+#if CONFIG_GARAGE_DOOR_SENSOR_COUNT > 0
+using GarageSensors = DoorSensor<CONFIG_GARAGE_DOOR_SENSOR_COUNT>;
+using ZigbeeService = ZigbeeGarageDoorOpener<GarageRelays, GarageSensors>;
+#else
 using ZigbeeService = ZigbeeGarageDoorOpener<GarageRelays>;
+#endif
 
 // Enables the external antenna switch: GPIO 3 low, GPIO 14 high.
 void enable_external_antenna() noexcept {
@@ -127,6 +175,22 @@ extern "C" void app_main() noexcept {
         .active_level = CONFIG_GARAGE_RELAY_ACTIVE_LEVEL
     };
     ESP_ERROR_CHECK(GarageRelays::init(relay_config));
+
+#if CONFIG_GARAGE_DOOR_SENSOR_COUNT > 0
+    GarageSensors::Config sensor_config{
+        .pins = get_sensor_pins<CONFIG_GARAGE_DOOR_SENSOR_COUNT>(),
+        .active_level = CONFIG_GARAGE_DOOR_SENSOR_ACTIVE_LEVEL
+    };
+    ESP_ERROR_CHECK(GarageSensors::init(sensor_config));
+
+    // Log initial sensor state for debugging
+    for (std::size_t s = 0; s < GarageSensors::sensor_count(); ++s) {
+        const uint8_t ch = static_cast<uint8_t>(s + 1);
+        const bool closed = GarageSensors::is_door_closed(ch);
+        ESP_LOGI(TAG, "Door sensor %u (GPIO %d): door %s",
+                 ch, GarageSensors::get_pin(ch), closed ? "closed" : "open");
+    }
+#endif
 
     enable_external_antenna();
 

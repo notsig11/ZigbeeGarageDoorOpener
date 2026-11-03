@@ -8,11 +8,11 @@ I started building this based on the ESP-IDF Zigbee examples by hand and decided
 
 - **Development Board:** [Seeed Studio XIAO ESP32C6](https://wiki.seeedstudio.com/xiao_esp32c6get_started/)
 - **Relay Module:** 8-channel relay board (wired to GPIO pins configured via Kconfig)
+- **Door Sensors:** Normally-open magnetic reed switches (wired to GPIO pins configured via Kconfig)
 - **Power:** 3.3V logic level for the ESP32-C6; relay module coil voltage depends on your hardware
 
 ## TODO:
-- Add open/closed detection for doors.
-- Investigate the device type.   Has to be something better than lock/unlock but I wanted to get this going quickly.
+- Investigate the device type. Has to be something better than lock/unlock but I wanted to get this going quickly.
 
 ## Prerequisites
 
@@ -45,6 +45,23 @@ Run `idf.py menuconfig` to adjust the following options under **Garage Door Open
 | Pulse Duration | 300 ms | How long each relay pulse stays active |
 | Active Level | 0 (active-low) | Logic level that triggers the relay |
 
+### Door Sensor Configuration
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| Sensor Count | 1 | Number of door sensor channels (0–8, set to 0 to disable) |
+| Sensor Pin 1–8 | 0, 1, 2, 3, … | GPIO pin for each door sensor (magnetic reed switch) |
+| Active Level | 0 (active-low) | Logic level when door is closed (reed switch closed) |
+| Poll Interval | 5000 ms | How often to poll sensors for state changes (1000–60000 ms) |
+
+Each sensor is mapped to the corresponding relay channel (sensor 1 → relay 1, etc.).
+When a sensor is connected, the Zigbee Door Lock cluster reports the actual door state
+(locked when closed, unlocked when open) based on the sensor reading.
+
+The device polls sensors periodically (default every 5 seconds) so that doors opened or
+closed by a wall button or remote control are reflected in the Zigbee LockState attribute
+and updated in Home Assistant.
+
 ### Zigbee Channel Configuration
 
 | Option | Default | Description |
@@ -75,6 +92,7 @@ Once paired, each relay appears as a Door Lock entity in [Home Assistant](https:
 │   ├── ZigbeeGarageDoorOpener.cpp  # Entry point and Zigbee signal handlers
 │   ├── ZigbeeGarageDoorOpener.hpp  # Template service class
 │   ├── RelayController.hpp     # Template-based GPIO relay controller
+│   ├── DoorSensor.hpp          # Template-based GPIO door sensor controller
 │   └── ZigbeeHelpers.hpp       # Host-testable Zigbee helper functions
 └── test/
     └── host/                   # Host-side unit tests with ESP-IDF stubs

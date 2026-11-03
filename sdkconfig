@@ -3870,6 +3870,22 @@ CONFIG_GARAGE_RELAY_ACTIVE_LEVEL=0
 # end of Relay Configuration
 
 #
+# Door Sensor Configuration
+#
+CONFIG_GARAGE_DOOR_SENSOR_COUNT=3
+# default:
+CONFIG_GARAGE_DOOR_SENSOR_PIN_1=0
+# default:
+CONFIG_GARAGE_DOOR_SENSOR_PIN_2=1
+# default:
+CONFIG_GARAGE_DOOR_SENSOR_PIN_3=2
+# default:
+CONFIG_GARAGE_DOOR_SENSOR_ACTIVE_LEVEL=0
+# default:
+CONFIG_GARAGE_DOOR_SENSOR_POLL_INTERVAL_MS=5000
+# end of Door Sensor Configuration
+
+#
 # Zigbee Channel Configuration
 #
 # default:
